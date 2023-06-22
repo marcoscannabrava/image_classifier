@@ -30,3 +30,4 @@ Accuracy ~ 58%
 
 # References
 [Training a Classifier — PyTorch Tutorials 2.0.1+cu117 documentation](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
+[Optional: Data Parallelism — PyTorch Tutorials 2.0.1+cu117 documentation](https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html)
