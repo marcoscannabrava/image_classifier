@@ -34,19 +34,17 @@ class Net(nn.Module):
         x = self.fc3(x)
         return x
 
+    def setup_optimizer(self):
+        # Loss function and optimizer
+        # * moved here to avoid global objects and ensure right ordering in distributed computing
+        # i.e. set them up after transfering model to gpu
+        return nn.CrossEntropyLoss(), optim.SGD(self.parameters(), lr=0.001, momentum=0.9)
 
 net = Net()
-
-
-# Loss function and optimizer
-
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-
-# 4 x 3 x 32 x 32
+default_criterion, default_optimizer = net.setup_optimizer()
 
 # Training
-def train(device=None):
+def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion):
     for epoch in range(2):  # loop over the dataset multiple times
 
         running_loss = 0.0
@@ -58,8 +56,8 @@ def train(device=None):
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
+            outputs = model(inputs)
+            loss = loss_fn(outputs, labels)
             loss.backward()
             optimizer.step()
 
