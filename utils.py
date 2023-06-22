@@ -1,4 +1,5 @@
-from model import trainloader, torchvision, classes, batch_size
+from model import trainloader
+from data import torchvision, classes, batch_size
 import matplotlib.pyplot as plt
 import numpy as np
 
