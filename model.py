@@ -44,7 +44,7 @@ net = Net()
 default_criterion, default_optimizer = net.setup_optimizer()
 
 # Training
-def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion):
+def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader):
     for epoch in range(2):  # loop over the dataset multiple times
 
         running_loss = 0.0
