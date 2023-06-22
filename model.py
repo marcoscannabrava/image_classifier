@@ -7,6 +7,14 @@ from data import trainloader, testloader, classes
 
 # Model definition
 
+x = [ 
+    [1,1,1],
+    [1,1,1],
+    [1,1,1]
+]
+
+# x = [1,1,1,1,1,1,1,1...]
+
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -35,6 +43,7 @@ net = Net()
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
+# 4 x 3 x 32 x 32
 
 # Training
 def train(device=None):
