@@ -1,9 +1,5 @@
 import os
-import sys
-import tempfile
 import torch
-import torch.nn as nn
-import torch.optim as optim
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -20,26 +16,26 @@ def setup(rank, world_size):
     os.environ['MASTER_PORT'] = '12355'
 
     # initialize the process group
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    dist.init_process_group("nccl", rank=rank, world_size=world_size) # or "gloo"
 
 def cleanup():
     dist.destroy_process_group()
 
-def prep_data(dataset, world_size, rank):
+def prep_data(dataset, batch_size, world_size, rank):
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
-    return DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, sampler=sampler) # type: ignore
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2, sampler=sampler) # type: ignore
 
-def distributed_training(rank, world_size, model, train_fn, dataset):
+def distributed_training(rank, world_size, model, train_fn, dataset, batch_size):
     print("distributed_training on:", rank)
     setup(rank, world_size)
     model = model.to(rank)
-    sampled_dataloader = prep_data(dataset, world_size, rank)
+    sampled_dataloader = prep_data(dataset, batch_size, world_size, rank)
     criterion, optimizer = model.setup_optimizer()
     ddp_model = DDP(model, device_ids=[rank])
     train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
     cleanup()
 
-def run(model, train_fn, dataset):
+def run(model, train_fn, dataset, batch_size):
     device = 'cpu'
     if torch.backends.mps.is_available(): # type: ignore
         device = 'mps'  # enables training on the Macbook Pro's GPU
@@ -53,4 +49,9 @@ def run(model, train_fn, dataset):
 
     world_size = torch.cuda.device_count()
 
-    mp.spawn(distributed_training, args=(world_size, model, train_fn, dataset), nprocs=world_size, join=True)
+    mp.spawn(
+        distributed_training,
+        args=(world_size, model, train_fn, dataset, batch_size),
+        nprocs=world_size,
+        join=True
+    )
