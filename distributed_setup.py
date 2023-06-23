@@ -22,8 +22,8 @@ def cleanup():
     dist.destroy_process_group()
 
 def prep_data(dataset, batch_size, world_size, rank):
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2, sampler=sampler) # type: ignore
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=False)
+    return DataLoader(dataset, batch_size=batch_size, num_workers=2, sampler=sampler) # type: ignore
 
 def distributed_training(rank, world_size, model, train_fn, dataset, batch_size):
     print("distributed_training on:", rank)

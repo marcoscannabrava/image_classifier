@@ -50,7 +50,7 @@ def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_c
         running_loss = 0.0
         for i, data in enumerate(dataloader, 0):
             # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = (data[0].to(device), data[1].to(device)) if device else data
+            inputs, labels = (data[0].to(device), data[1].to(device)) if device != 'cpu' else data
 
             # zero the parameter gradients
             optimizer.zero_grad()
