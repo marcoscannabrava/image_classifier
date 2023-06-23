@@ -16,14 +16,14 @@ def setup(rank, world_size):
     os.environ['MASTER_PORT'] = '12355'
 
     # initialize the process group
-    dist.init_process_group("nccl", rank=rank, world_size=world_size) # or "gloo"
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 def cleanup():
     dist.destroy_process_group()
 
 def prep_data(dataset, batch_size, world_size, rank):
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=False)
-    return DataLoader(dataset, batch_size=batch_size, num_workers=2, sampler=sampler) # type: ignore
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True)
+    return DataLoader(dataset, batch_size=batch_size, num_workers=0, sampler=sampler) # type: ignore
 
 def distributed_training(rank, world_size, model, train_fn, dataset, batch_size):
     print("distributed_training on:", rank)
@@ -33,6 +33,12 @@ def distributed_training(rank, world_size, model, train_fn, dataset, batch_size)
     criterion, optimizer = model.setup_optimizer()
     ddp_model = DDP(model, device_ids=[rank])
     train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
+
+    # DDP automatically syncs gradients after backward() pass so we know that,
+    # after training, process 0 will have all gradients to save the model
+    if rank == 0:
+        PATH = './cifar_net_gpu_distributed.pth'
+        torch.save(model.state_dict(), PATH)
     cleanup()
 
 def run(model, train_fn, dataset, batch_size):
@@ -42,10 +48,13 @@ def run(model, train_fn, dataset, batch_size):
     elif torch.cuda.is_available():
         device = 'cuda:0'
 
-    print("Running on ", torch.cuda.device_count(), device)
+    print("Running on ", torch.cuda.device_count() or 1, device)
 
     if device == 'cpu':
         raise Exception("No GPU found.")
+    
+    if device == 'mps':
+        raise Exception("Mac has a single GPU.")
 
     world_size = torch.cuda.device_count()
 

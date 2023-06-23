@@ -7,14 +7,6 @@ from data import trainloader, testloader, classes
 
 # Model definition
 
-x = [ 
-    [1,1,1],
-    [1,1,1],
-    [1,1,1]
-]
-
-# x = [1,1,1,1,1,1,1,1...]
-
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -35,9 +27,7 @@ class Net(nn.Module):
         return x
 
     def setup_optimizer(self):
-        # Loss function and optimizer
-        # * moved here to avoid global objects and ensure right ordering in distributed computing
-        # i.e. set them up after transfering model to gpu
+        """ Returns loss function and sets up optimizer"""
         return nn.CrossEntropyLoss(), optim.SGD(self.parameters(), lr=0.001, momentum=0.9)
 
 net = Net()
@@ -46,6 +36,9 @@ default_criterion, default_optimizer = net.setup_optimizer()
 # Training
 def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader):
     for epoch in range(2):  # loop over the dataset multiple times
+
+        if isinstance(device, int): # HACK: if device is int, then we're using DDP
+            dataloader.sampler.set_epoch(epoch) # type: ignore
 
         running_loss = 0.0
         for i, data in enumerate(dataloader, 0):
@@ -70,7 +63,7 @@ def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_c
     print('Finished Training')
 
 
-def test(device=None):
+def test(model, device=None):
     correct = 0
     total = 0
 
@@ -83,7 +76,7 @@ def test(device=None):
         for data in testloader:
             images, labels = (data[0].to(device), data[1].to(device)) if device else data
             # calculate outputs by running images through the network
-            outputs = net(images)
+            outputs = model(images)
             # the class with the highest energy is what we choose as prediction
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
