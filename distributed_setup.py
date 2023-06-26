@@ -21,15 +21,15 @@ def setup(rank, world_size):
 def cleanup():
     dist.destroy_process_group()
 
-def prep_data(dataset, batch_size, world_size, rank):
+def prep_data(dataset, batch_size, world_size, rank, num_workers=0):
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True)
-    return DataLoader(dataset, batch_size=batch_size, num_workers=0, sampler=sampler) # type: ignore
+    return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sampler) # type: ignore
 
-def distributed_training(rank, world_size, model, train_fn, dataset, batch_size):
+def distributed_training(rank, world_size, model, train_fn, dataset, batch_size, num_workers):
     print("distributed_training on:", rank)
     setup(rank, world_size)
     model = model.to(rank)
-    sampled_dataloader = prep_data(dataset, batch_size, world_size, rank)
+    sampled_dataloader = prep_data(dataset, batch_size, world_size, rank, num_workers)
     criterion, optimizer = model.setup_optimizer()
     ddp_model = DDP(model, device_ids=[rank])
     train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
@@ -41,7 +41,7 @@ def distributed_training(rank, world_size, model, train_fn, dataset, batch_size)
         torch.save(model.state_dict(), PATH)
     cleanup()
 
-def run(model, train_fn, dataset, batch_size):
+def run(model, train_fn, dataset, batch_size, num_workers):
     device = 'cpu'
     if torch.backends.mps.is_available(): # type: ignore
         device = 'mps'  # enables training on the Macbook Pro's GPU
@@ -60,7 +60,7 @@ def run(model, train_fn, dataset, batch_size):
 
     mp.spawn(
         distributed_training,
-        args=(world_size, model, train_fn, dataset, batch_size),
+        args=(world_size, model, train_fn, dataset, batch_size, num_workers),
         nprocs=world_size,
         join=True
     )
