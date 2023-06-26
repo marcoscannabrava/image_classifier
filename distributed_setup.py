@@ -8,6 +8,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 
+from torch.utils.tensorboard import SummaryWriter
+from time import monotonic
 
 
 # Multi-process setup/cleanup functions
@@ -21,19 +23,32 @@ def setup(rank, world_size):
 def cleanup():
     dist.destroy_process_group()
 
-def prep_data(dataset, batch_size, world_size, rank, num_workers=0):
+def prep_data(dataset, world_size, rank, batch_size, num_workers=0):
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True)
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sampler) # type: ignore
 
-def distributed_training(rank, world_size, model, train_fn, dataset, batch_size, num_workers):
+def distributed_training(rank, world_size, model, train_fn, dataset, hyperparameters):
     print("distributed_training on:", rank)
     setup(rank, world_size)
     model = model.to(rank)
-    sampled_dataloader = prep_data(dataset, batch_size, world_size, rank, num_workers)
+    sampled_dataloader = prep_data(
+        dataset,
+        world_size,
+        rank,
+        batch_size=hyperparameters.get('batch_size'),
+        num_workers=hyperparameters.get('num_workers')
+    )
     criterion, optimizer = model.setup_optimizer()
     ddp_model = DDP(model, device_ids=[rank])
-    train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
-
+    comment = f'batch_size = {hyperparameters.get("batch_size")} num_workers = {hyperparameters.get("num_workers")}'
+    tb = SummaryWriter(comment=comment)
+    start = monotonic()
+    loss = train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
+    tb.add_hparams(
+        {"batch_size": hyperparameters.get("batch_size"), "num_workers": hyperparameters.get("num_workers")},
+        { "loss": loss, "runtime": monotonic() - start }
+    )
+    tb.close()
     # DDP automatically syncs gradients after backward() pass so we know that,
     # after training, process 0 will have all gradients to save the model
     if rank == 0:
@@ -41,7 +56,7 @@ def distributed_training(rank, world_size, model, train_fn, dataset, batch_size,
         torch.save(model.state_dict(), PATH)
     cleanup()
 
-def run(model, train_fn, dataset, batch_size, num_workers):
+def run(model, train_fn, dataset, hyperparameters):
     device = 'cpu'
     if torch.backends.mps.is_available(): # type: ignore
         device = 'mps'  # enables training on the Macbook Pro's GPU
@@ -60,7 +75,7 @@ def run(model, train_fn, dataset, batch_size, num_workers):
 
     mp.spawn(
         distributed_training,
-        args=(world_size, model, train_fn, dataset, batch_size, num_workers),
+        args=(world_size, model, train_fn, dataset, hyperparameters),
         nprocs=world_size,
         join=True
     )
