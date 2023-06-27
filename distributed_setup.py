@@ -27,8 +27,8 @@ def prep_data(dataset, world_size, rank, batch_size, num_workers=0):
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True)
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sampler) # type: ignore
 
-def distributed_training(rank, world_size, model, train_fn, dataset, hyperparameters):
-    print("distributed_training on:", rank)
+def distributed_training(rank, world_size, model, train_fn, dataset, hyperparameters, tb):
+    print("distributed_training on:", rank)    
     setup(rank, world_size)
     model = model.to(rank)
     sampled_dataloader = prep_data(
@@ -40,20 +40,17 @@ def distributed_training(rank, world_size, model, train_fn, dataset, hyperparame
     )
     criterion, optimizer = model.setup_optimizer()
     ddp_model = DDP(model, device_ids=[rank])
-    comment = f'batch_size = {hyperparameters.get("batch_size")} num_workers = {hyperparameters.get("num_workers")}'
-    tb = SummaryWriter(comment=comment)
-    start = monotonic()
     loss = train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
-    tb.add_hparams(
-        {"batch_size": hyperparameters.get("batch_size"), "num_workers": hyperparameters.get("num_workers")},
-        { "loss": loss, "runtime": monotonic() - start }
-    )
-    tb.close()
     # DDP automatically syncs gradients after backward() pass so we know that,
     # after training, process 0 will have all gradients to save the model
     if rank == 0:
         PATH = './cifar_net_gpu_distributed.pth'
         torch.save(model.state_dict(), PATH)
+        tb.add_hparams(
+            {"batch_size": hyperparameters.get("batch_size"), "num_workers": hyperparameters.get("num_workers")},
+            { "loss": loss, "runtime": monotonic() - start }
+        )
+        tb.close()
     cleanup()
 
 def run(model, train_fn, dataset, hyperparameters):
@@ -73,9 +70,13 @@ def run(model, train_fn, dataset, hyperparameters):
 
     world_size = torch.cuda.device_count()
 
+    tb = SummaryWriter(comment=f'batch_size={hyperparameters.get("batch_size")} num_workers={hyperparameters.get("num_workers")}')
+    start = monotonic()
+
     mp.spawn(
         distributed_training,
-        args=(world_size, model, train_fn, dataset, hyperparameters),
+        args=(world_size, model, train_fn, dataset, hyperparameters, tb),
         nprocs=world_size,
         join=True
     )
+

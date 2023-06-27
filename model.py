@@ -5,8 +5,6 @@ import torch.optim as optim
 
 from data import trainloader, testloader, classes
 
-from torch.utils.tensorboard import SummaryWriter
-
 
 # Model definition
 
@@ -37,7 +35,7 @@ net = Net()
 default_criterion, default_optimizer = net.setup_optimizer()
 
 # Training
-def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader, tensorboard: SummaryWriter | None = None):
+def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader):
     running_loss = 0.0
     for epoch in range(2):  # loop over the dataset multiple times
 
@@ -62,9 +60,6 @@ def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_c
             if i % 2000 == 1999:    # print every 2000 mini-batches
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
                 running_loss = 0.0
-        
-        if tensorboard:
-            tensorboard.add_scalar("Loss", running_loss, epoch)
     
     print('Finished Training')
     return running_loss
