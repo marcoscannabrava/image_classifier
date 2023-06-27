@@ -35,16 +35,16 @@ net = Net()
 default_criterion, default_optimizer = net.setup_optimizer()
 
 # Training
-def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader):
+def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_criterion, dataloader=trainloader, fabric=None):
     running_loss = 0.0
     for epoch in range(2):  # loop over the dataset multiple times
 
-        if isinstance(device, int): # HACK: if device is int, then we're using DDP
+        if not fabric and isinstance(device, int): # HACK: if device is int, then we're using DDP
             dataloader.sampler.set_epoch(epoch) # type: ignore
 
         for i, data in enumerate(dataloader, 0):
             # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = (data[0].to(device), data[1].to(device)) if device != 'cpu' else data
+            inputs, labels = (data[0].to(device), data[1].to(device)) if device != 'cpu' and fabric is None else data
 
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -52,7 +52,7 @@ def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_c
             # forward + backward + optimize
             outputs = model(inputs)
             loss = loss_fn(outputs, labels)
-            loss.backward()
+            loss.backward() if not fabric else fabric.backward(loss)
             optimizer.step()
 
             # print statistics
@@ -64,7 +64,6 @@ def train(device=None, model=net, optimizer=default_optimizer, loss_fn=default_c
     print('Finished Training')
     return running_loss
         
-
 
 def test(model, device=None):
     correct = 0
