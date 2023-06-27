@@ -11,8 +11,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from time import monotonic
 
-import lightning as L
-
 
 # Multi-process setup/cleanup functions
 def setup(rank, world_size):
@@ -29,22 +27,24 @@ def prep_data(dataset, world_size, rank, batch_size, num_workers=0):
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True)
     return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sampler) # type: ignore
 
-def distributed_training(rank, world_size, model, train_fn, dataset, hyperparameters, fabric, tb):
+def distributed_training(rank, world_size, model, train_fn, dataset, hyperparameters, tb):
+    print("distributed_training on:", rank)
     start = monotonic()
-    if rank is not None:
-        print("distributed_training on:", rank)    
-        setup(rank, world_size)
-
+    setup(rank, world_size)
+    model = model.to(rank)
+    sampled_dataloader = prep_data(
+        dataset,
+        world_size,
+        rank,
+        batch_size=hyperparameters.get('batch_size'),
+        num_workers=hyperparameters.get('num_workers')
+    )
     criterion, optimizer = model.setup_optimizer()
-    model, optimizer = fabric.setup(model, optimizer)
-    dataloader = DataLoader(dataset)
-    dataloader = fabric.setup_dataloaders(dataloader)
-    
-    ddp_model = DDP(model, device_ids=[rank]) if not fabric else model
-    loss = train_fn(rank, ddp_model, optimizer, criterion, dataloader, fabric=fabric)
+    ddp_model = DDP(model, device_ids=[rank])
+    loss = train_fn(rank, ddp_model, optimizer, criterion, sampled_dataloader)
     # DDP automatically syncs gradients after backward() pass so we know that,
     # after training, process 0 will have all gradients to save the model
-    if rank == 0 or rank is None:
+    if rank == 0:
         PATH = './cifar_net_gpu_distributed.pth'
         torch.save(model.state_dict(), PATH)
         tb.add_hparams(
@@ -52,8 +52,7 @@ def distributed_training(rank, world_size, model, train_fn, dataset, hyperparame
             { "loss": loss, "runtime": monotonic() - start }
         )
         tb.close()
-    if rank is not None:
-        cleanup()
+    cleanup()
 
 def run(model, train_fn, dataset, hyperparameters):
     device = 'cpu'
@@ -71,16 +70,12 @@ def run(model, train_fn, dataset, hyperparameters):
         raise Exception("Mac has a single GPU.")
 
     world_size = torch.cuda.device_count()
-    
-    fabric = L.Fabric(accelerator='cuda' if 'cuda' in device else 'cpu', devices=world_size, strategy="ddp")
-    fabric.launch()
 
     tb = SummaryWriter(comment=f'batch_size={hyperparameters.get("batch_size")} num_workers={hyperparameters.get("num_workers")}')
-    start = monotonic()
 
     mp.spawn(
         distributed_training,
-        args=(world_size, model, train_fn, dataset, hyperparameters, fabric, tb),
+        args=(world_size, model, train_fn, dataset, hyperparameters, tb),
         nprocs=world_size,
         join=True
     )
