@@ -12,8 +12,8 @@ import torch.optim as optim
 from model import Net
 from data import *
 
-HP_BATCH_SIZE = [100,1000,5000]
-HP_NUM_WORKERS = [0,4,8,16]
+HP_BATCH_SIZE = [100,5000]
+HP_NUM_WORKERS = [0,4,16]
 
 experiments = product(HP_BATCH_SIZE, HP_NUM_WORKERS)
 
@@ -26,7 +26,7 @@ for batch_size, num_workers in experiments:
     fabric.launch()
     criterion, optimizer = nn.CrossEntropyLoss(), optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     model, optimizer = fabric.setup(model, optimizer)
-    dataloader = fabric.setup_dataloaders(DataLoader(trainset))
+    dataloader = fabric.setup_dataloaders(DataLoader(trainset, batch_size=batch_size, num_workers=num_workers))
 
     logger.log_hyperparams({ 'batch_size': batch_size, 'num_workers': num_workers })
 
@@ -46,8 +46,8 @@ for batch_size, num_workers in experiments:
             running_loss += loss.item()
 
     PATH = f'./experiments/fabric-batch_size={batch_size}-num_workers={num_workers}.pth'
-    fabric.save(PATH, { 'mode': model.state_dict() })
+    fabric.save(PATH, { 'model': model.state_dict() })
     
     runtime = monotonic() - start
-    print(f"Finished training. loss={loss}, runtime={runtime}")
-    fabric.log_dict({ 'loss': loss, 'runtime': runtime })
+    print(f"Finished training. loss={running_loss}, runtime={runtime}")
+    fabric.log_dict({ 'loss': running_loss, 'runtime': runtime })
