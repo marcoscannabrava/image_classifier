@@ -1,4 +1,7 @@
+from time import monotonic
+
 import lightning as L
+from lightning.fabric.loggers import TensorBoardLogger
 
 import torch
 import torch.nn as nn
@@ -9,9 +12,11 @@ from model import Net
 from data import *
 
 
+
 model = Net()
 
-fabric = L.Fabric(accelerator='cuda', devices=4, strategy="ddp")
+logger = TensorBoardLogger(root_dir="logs")
+fabric = L.Fabric(accelerator='cuda', devices=4, strategy="ddp", loggers=logger)
 fabric.launch()
 
 criterion, optimizer = nn.CrossEntropyLoss(), optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -20,7 +25,7 @@ model, optimizer = fabric.setup(model, optimizer)
 
 dataloader = fabric.setup_dataloaders(DataLoader(trainset))
 
-
+start = montonic()
 running_loss = 0.0
 for epoch in range(2): 
 
@@ -38,5 +43,7 @@ for epoch in range(2):
             print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
             running_loss = 0.0
 
-PATH = './cifar_net_gpu_distributed.pth'
-torch.save(model.state_dict(), PATH)
+PATH = './cifar_net_gpu_distributed_fabric.pth'
+fabric.save(PATH, { 'mode': model.state_dict() })
+
+fabric.log_dict({ 'loss': loss, 'runtime': monotonic() - start })
