@@ -1,4 +1,5 @@
 from time import monotonic
+from itertools import product
 
 import lightning as L
 from lightning.fabric.loggers import TensorBoardLogger
@@ -11,39 +12,42 @@ import torch.optim as optim
 from model import Net
 from data import *
 
+HP_BATCH_SIZE = [100,1000,5000]
+HP_NUM_WORKERS = [0,4,8,16]
 
+experiments = product(HP_BATCH_SIZE, HP_NUM_WORKERS)
 
-model = Net()
+for batch_size, num_workers in experiments:
+    print(f"Running training... batch_size={batch_size}, num_workers={num_workers}")
+    model = Net()
 
-logger = TensorBoardLogger(root_dir="logs")
-fabric = L.Fabric(accelerator='cuda', devices=4, strategy="ddp", loggers=logger)
-fabric.launch()
+    logger = TensorBoardLogger(root_dir="logs")
+    fabric = L.Fabric(accelerator='cuda', devices=4, strategy="ddp", loggers=logger)
+    fabric.launch()
+    criterion, optimizer = nn.CrossEntropyLoss(), optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    model, optimizer = fabric.setup(model, optimizer)
+    dataloader = fabric.setup_dataloaders(DataLoader(trainset))
 
-criterion, optimizer = nn.CrossEntropyLoss(), optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    logger.log_hyperparams({ 'batch_size': batch_size, 'num_workers': num_workers })
 
-model, optimizer = fabric.setup(model, optimizer)
+    start = monotonic()
+    running_loss = 0.0
+    for epoch in range(2): 
 
-dataloader = fabric.setup_dataloaders(DataLoader(trainset))
+        for i, data in enumerate(dataloader, 0):
+            inputs, labels = data
 
-start = montonic()
-running_loss = 0.0
-for epoch in range(2): 
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            fabric.backward(loss)
+            optimizer.step()
 
-    for i, data in enumerate(dataloader, 0):
-        inputs, labels = data
+            running_loss += loss.item()
 
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        fabric.backward(loss)
-        optimizer.step()
-
-        running_loss += loss.item()
-        if i % 2000 == 1999:    # print every 2000 mini-batches
-            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-            running_loss = 0.0
-
-PATH = './cifar_net_gpu_distributed_fabric.pth'
-fabric.save(PATH, { 'mode': model.state_dict() })
-
-fabric.log_dict({ 'loss': loss, 'runtime': monotonic() - start })
+    PATH = f'./experiments/fabric-batch_size={batch_size}-num_workers={num_workers}.pth'
+    fabric.save(PATH, { 'mode': model.state_dict() })
+    
+    runtime = monotonic() - start
+    print(f"Finished training. loss={loss}, runtime={runtime}")
+    fabric.log_dict({ 'loss': loss, 'runtime': runtime })
