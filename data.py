@@ -20,3 +20,6 @@ testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True
 testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2) # type: ignore
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+
+# NOTE: on CPU, setting num_workers to 2 or 12 makes no difference
