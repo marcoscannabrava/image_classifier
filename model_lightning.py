@@ -41,7 +41,7 @@ class LitNet(L.LightningModule):
         return loss
     
     def configure_optimizers(self):
-        optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+        optimizer = optim.SGD(self.trainer.model.parameters(), lr=0.001, momentum=0.9)
         return optimizer
 
 
