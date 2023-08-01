@@ -7,11 +7,12 @@ from model_lightning import LitNet
 from data import testloader, classes
 
 
-PATH = '/project/jobs/double-4t4-attempt-3/nodes.0/cifar_fsdp.pth'
+PATH = '/project/jobs/double-4t4-attempt-4/nodes.0/cifar_fsdp.pth'
 
 def main():
     net = LitNet()
     net.load_state_dict(torch.load(PATH))
+    net.eval()
     outputs = net(images)
     _, predicted = torch.max(outputs, 1)
 

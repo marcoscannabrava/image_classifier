@@ -4,7 +4,7 @@ import torch
 from model_lightning import net
 from data import trainloader, testloader, classes
 
-trainer = L.Trainer(accelerator='gpu', max_epochs=2, strategy='fsdp')
+trainer = L.Trainer(accelerator='gpu', max_epochs=2, strategy='fsdp', enable_checkpointing=True)
 
 PATH = './cifar_fsdp.pth'
 
